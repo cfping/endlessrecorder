@@ -51,6 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Flag für das saubere Beenden des Programms
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
+    let sr = running.clone();
 
     // Thread für das Erkennen von Tastendrücken
     thread::spawn(move || {
@@ -75,7 +76,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         move |data: &[f32], _: &cpal::InputCallbackInfo| {
             let mut samples = Vec::with_capacity(data.len());
             samples.extend_from_slice(data);
-            cache_sender.send(samples).unwrap();
+            if let Err(_) = cache_sender.send(samples) {
+                if !sr.load(Ordering::SeqCst) {
+                    return;
+                }
+            }
         },
         |err| eprintln!("Error during stream: {:?}", err),
         None,
@@ -88,60 +93,60 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         println!("wave cache start");
 
+        let mut filename = format!("{}.wav", Local::now().format("%Y-%m-%d_%H-%M-%S"));
+        println!("File {}", filename);
+
         loop {
             if let Ok(samples) = receiver.try_recv() {
                 cached_samples.extend(samples);
 
                 if cached_samples.len() * std::mem::size_of::<f32>() >= CACHE_FLUSH_SIZE || !running.load(Ordering::SeqCst) {
                     
-                    let filename = format!("{}.wav", Local::now().format("%Y-%m-%d_%H-%M-%S"));
-                    println!("File {}", filename);
-
                     let spec = WavSpec {
                         channels: CHANNELS,
                         sample_rate: selected_sample_rate,
                         bits_per_sample: 32,
                         sample_format: hound::SampleFormat::Float,
                     };
-                    let mut writer = WavWriter::create(filename, spec).unwrap();
+                    let mut writer = WavWriter::create(filename.clone(), spec).unwrap();
 
                     for sample in cached_samples.drain(..) {
                         writer.write_sample(sample).unwrap();
                     }
                     writer.finalize().unwrap();
+                    
+                    println!("finished file {}", filename);
 
                     if !running.load(Ordering::SeqCst) {
                         break;
                     }
 
-                    println!("finished file");
+                    filename = format!("{}.wav", Local::now().format("%Y-%m-%d_%H-%M-%S"));
+                    println!("File {}", filename);
                 }
             }
 
             if !running.load(Ordering::SeqCst) {
                 if cached_samples.len() * std::mem::size_of::<f32>() > 0 {
 
-                    let filename = format!("{}.wav", Local::now().format("%Y-%m-%d_%H-%M-%S"));
-                    println!("File {}", filename);
-
                     let spec = WavSpec {
                         channels: CHANNELS,
                         sample_rate: selected_sample_rate,
                         bits_per_sample: 32,
                         sample_format: hound::SampleFormat::Float,
                     };
-                    let mut writer = WavWriter::create(filename, spec).unwrap();
+                    let mut writer = WavWriter::create(filename.clone(), spec).unwrap();
 
                     for sample in cached_samples.drain(..) {
                         writer.write_sample(sample).unwrap();
                     }
                     writer.finalize().unwrap();
+                    
+                    println!("finished file {}", filename);
 
                     if !running.load(Ordering::SeqCst) {
                         break;
                     }
-
-                    println!("finished file");
                 }
                 break;
             }
