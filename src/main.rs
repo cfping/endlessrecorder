@@ -1,11 +1,13 @@
 extern crate cpal;
+extern crate crossterm;
 extern crate ringbuf;
 extern crate hound;
 extern crate chrono;
 
 use cpal::{traits::{DeviceTrait, HostTrait, StreamTrait}, StreamConfig};
+use crossterm::{event, ExecutableCommand};
 use hound::{WavSpec, WavWriter};
-use std::sync::mpsc::channel;
+use std::sync::{atomic::AtomicBool, atomic::Ordering, mpsc::channel, Arc};
 use std::thread;
 use chrono::Local;
 use std::error::Error;
@@ -62,6 +64,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         stream.play().unwrap();
     });
 
+    // Flag für das saubere Beenden des Programms
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+
+    // Thread für das Erkennen von Tastendrücken
+    thread::spawn(move || {
+        while r.load(Ordering::SeqCst) {
+            if event::poll(std::time::Duration::from_millis(100)).unwrap() {
+                if let Ok(true) = event::read().map(|e| matches!(e, event::Event::Key(_))) {
+                    r.store(false, Ordering::SeqCst);
+                }
+            }
+        }
+    });
+
     // Thread for writing to WAV files
     let write_thread = thread::spawn(move || {
         let mut cached_samples = Vec::new();
@@ -72,7 +89,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             if let Ok(samples) = receiver.try_recv() {
                 cached_samples.extend(samples);
 
-                if cached_samples.len() * std::mem::size_of::<f32>() >= CACHE_FLUSH_SIZE {
+                if cached_samples.len() * std::mem::size_of::<f32>() >= CACHE_FLUSH_SIZE || !running.load(Ordering::SeqCst) {
                     let filename = format!("{}.wav", Local::now().format("%Y-%m-%d_%H-%M-%S"));
                     println!("File {}", filename);
                     let spec = WavSpec {
@@ -87,6 +104,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                         writer.write_sample(sample).unwrap();
                     }
                     writer.finalize().unwrap();
+
+                    if !running.load(Ordering::SeqCst) {
+                        break;
+                    }
+
                     println!("finished file");
                 }
             }
