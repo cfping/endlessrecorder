@@ -51,7 +51,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Flag für das saubere Beenden des Programms
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
-    //let r2 = running.clone();
 
     // Thread für das Erkennen von Tastendrücken
     thread::spawn(move || {
@@ -68,26 +67,20 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Thread for caching samples
     let cache_sender = sender.clone();
-    //thread::spawn(move || {
-        println!("Record start");
 
-        let stream = device.build_input_stream(
-            &config,
-            move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                let mut samples = Vec::with_capacity(data.len());
-                samples.extend_from_slice(data);
-                cache_sender.send(samples).unwrap();
-            },
-            |err| eprintln!("Error during stream: {:?}", err),
-            None,
-        ).unwrap();
-        stream.play().unwrap();
+    println!("Record start");
 
-        //while r2.load(Ordering::SeqCst) {
-        //    std::thread::sleep(std::time::Duration::from_millis(100));
-        //}
-        //println!("Record ends");
-    //});
+    let stream = device.build_input_stream(
+        &config,
+        move |data: &[f32], _: &cpal::InputCallbackInfo| {
+            let mut samples = Vec::with_capacity(data.len());
+            samples.extend_from_slice(data);
+            cache_sender.send(samples).unwrap();
+        },
+        |err| eprintln!("Error during stream: {:?}", err),
+        None,
+    ).unwrap();
+    stream.play().unwrap();
 
     // Thread for writing to WAV files
     let write_thread = thread::spawn(move || {
