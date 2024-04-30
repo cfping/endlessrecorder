@@ -5,7 +5,7 @@ extern crate hound;
 extern crate chrono;
 
 use cpal::{traits::{DeviceTrait, HostTrait, StreamTrait}, StreamConfig};
-use crossterm::{event, ExecutableCommand};
+use crossterm::event;
 use hound::{WavSpec, WavWriter};
 use std::sync::{atomic::AtomicBool, atomic::Ordering, mpsc::channel, Arc};
 use std::thread;
@@ -18,6 +18,10 @@ const CACHE_SIZE_IN_BYTES: usize = 512 * 1024 * 1024; // 512 MB
 const CACHE_FLUSH_SIZE: usize = CACHE_SIZE_IN_BYTES / 2; // Half the cache size
 
 fn main() -> Result<(), Box<dyn Error>> {
+    
+    let current_dir = std::env::current_dir()?;
+    println!("Current working directory: {:?}", current_dir);
+
     let host = cpal::default_host();
     let device = host.default_input_device().expect("No input device available");
 
@@ -55,6 +59,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             &config,
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
                 let mut samples = Vec::with_capacity(data.len());
+                println!("{}", data.len());
                 samples.extend_from_slice(data);
                 cache_sender.send(samples).unwrap();
             },
@@ -88,10 +93,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         loop {
             if let Ok(samples) = receiver.try_recv() {
                 cached_samples.extend(samples);
+                println!("{}", cached_samples.len() );
 
                 if cached_samples.len() * std::mem::size_of::<f32>() >= CACHE_FLUSH_SIZE || !running.load(Ordering::SeqCst) {
+                    
                     let filename = format!("{}.wav", Local::now().format("%Y-%m-%d_%H-%M-%S"));
                     println!("File {}", filename);
+
                     let spec = WavSpec {
                         channels: CHANNELS,
                         sample_rate: selected_sample_rate,
@@ -112,7 +120,36 @@ fn main() -> Result<(), Box<dyn Error>> {
                     println!("finished file");
                 }
             }
+            
+            if !running.load(Ordering::SeqCst) {
+                if cached_samples.len() * std::mem::size_of::<f32>() > 0 {
+
+                    let filename = format!("{}.wav", Local::now().format("%Y-%m-%d_%H-%M-%S"));
+                    println!("File {}", filename);
+
+                    let spec = WavSpec {
+                        channels: CHANNELS,
+                        sample_rate: selected_sample_rate,
+                        bits_per_sample: 32,
+                        sample_format: hound::SampleFormat::Float,
+                    };
+                    let mut writer = WavWriter::create(filename, spec).unwrap();
+
+                    for sample in cached_samples.drain(..) {
+                        writer.write_sample(sample).unwrap();
+                    }
+                    writer.finalize().unwrap();
+
+                    if !running.load(Ordering::SeqCst) {
+                        break;
+                    }
+
+                    println!("finished file");
+                }
+                break;
+            }
         }
+        println!("wave cache file ends");
     });
 
     write_thread.join().unwrap();
