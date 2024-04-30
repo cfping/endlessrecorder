@@ -18,7 +18,7 @@ const CACHE_SIZE_IN_BYTES: usize = 512 * 1024 * 1024; // 512 MB
 const CACHE_FLUSH_SIZE: usize = CACHE_SIZE_IN_BYTES / 2; // Half the cache size
 
 fn main() -> Result<(), Box<dyn Error>> {
-    
+    println!("{} Version {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
     let current_dir = std::env::current_dir()?;
     println!("Current working directory: {:?}", current_dir);
 
@@ -150,7 +150,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     });
 
     write_thread.join().unwrap();
-        
+
+    drop(stream);
+
     println!("Record stop");
 
     Ok(())
