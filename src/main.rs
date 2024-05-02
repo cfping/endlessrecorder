@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let device = host.default_input_device().expect("No input device available");
 
     let mut max_sample_rate: u32 = 0;
-    // Ausgabe der unterstützten Formate
+    // Output of the supported formats
     let supported_formats= device.supported_input_configs()?;
     for config_range  in supported_formats {
         println!("Supported format: {:?}", config_range );
@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // Verwenden Sie die bevorzugte Samplerate, wenn sie verfügbar ist, sonst die höchstmögliche
+    // Use the preferred sample rate if it is available, otherwise use the highest possible sample rate.
     let selected_sample_rate = if max_sample_rate >= cpal::SampleRate(SAMPLE_RATE).0 {
         cpal::SampleRate(SAMPLE_RATE).0
     } else {
@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         buffer_size: cpal::BufferSize::Default,
     };
 
-    // Flag für das saubere Beenden des Programms
+    // Flag for the clean termination of the program
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     let sr = running.clone();
