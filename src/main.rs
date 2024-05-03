@@ -13,7 +13,6 @@ use chrono::Local;
 use std::error::Error;
 
 const SAMPLE_RATE: u32 = 48000;
-const CHANNELS: u16 = 1;
 const CACHE_SIZE_IN_BYTES: usize = 512 * 1024 * 1024; // 512 MB
 const CACHE_FLUSH_SIZE: usize = CACHE_SIZE_IN_BYTES / 2; // Half the cache size
 
@@ -26,11 +25,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let device = host.default_input_device().expect("No input device available");
 
     let mut max_sample_rate: u32 = 0;
+	let mut supported_channels: u16 = 1;
     // Output of the supported formats
     let supported_formats= device.supported_input_configs()?;
     for config_range  in supported_formats {
         println!("Supported format: {:?}", config_range );
         if config_range.max_sample_rate().0 > max_sample_rate {
+			supported_channels = config_range.channels();
             max_sample_rate = config_range.max_sample_rate().0;
         }
     }
@@ -43,7 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let config = StreamConfig {
-        channels: CHANNELS,
+        channels: supported_channels,
         sample_rate: cpal::SampleRate(selected_sample_rate),
         buffer_size: cpal::BufferSize::Default,
     };
@@ -103,7 +104,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if cached_samples.len() * std::mem::size_of::<f32>() >= CACHE_FLUSH_SIZE || !running.load(Ordering::SeqCst) {
                     
                     let spec = WavSpec {
-                        channels: CHANNELS,
+                        channels: supported_channels,
                         sample_rate: selected_sample_rate,
                         bits_per_sample: 32,
                         sample_format: hound::SampleFormat::Float,
@@ -130,7 +131,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if cached_samples.len() * std::mem::size_of::<f32>() > 0 {
 
                     let spec = WavSpec {
-                        channels: CHANNELS,
+                        channels: supported_channels,
                         sample_rate: selected_sample_rate,
                         bits_per_sample: 32,
                         sample_format: hound::SampleFormat::Float,
@@ -153,6 +154,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         println!("wave cache file ends");
     });
+	
+	println!("End with any key");
 
     write_thread.join().unwrap();
 
