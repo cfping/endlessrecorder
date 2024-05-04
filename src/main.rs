@@ -49,6 +49,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         buffer_size: cpal::BufferSize::Default,
     };
 
+    println!("Selected: {:?}", config);
+
     // Flag for the clean termination of the program
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
